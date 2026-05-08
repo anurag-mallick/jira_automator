@@ -1,0 +1,17 @@
+ALTER TABLE "Ticket" ADD COLUMN "dueDate" TIMESTAMP(3);
+ALTER TABLE "Ticket" ADD COLUMN "timeSpent" INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE "Ticket" ADD COLUMN "tags" TEXT[];
+
+ALTER TABLE "Automation" ADD COLUMN "condition" TEXT;
+
+CREATE TABLE "ChecklistItem" (
+  "id" SERIAL NOT NULL,
+  "title" TEXT NOT NULL,
+  "isCompleted" BOOLEAN NOT NULL DEFAULT false,
+  "ticketId" INTEGER NOT NULL,
+  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "updatedAt" TIMESTAMP(3) NOT NULL,
+  CONSTRAINT "ChecklistItem_pkey" PRIMARY KEY ("id")
+);
+
+ALTER TABLE "ChecklistItem" ADD CONSTRAINT "ChecklistItem_ticketId_fkey" FOREIGN KEY ("ticketId") REFERENCES "Ticket"("id") ON DELETE CASCADE ON UPDATE CASCADE;

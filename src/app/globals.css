@@ -1,0 +1,77 @@
+@import "tailwindcss";
+@plugin "@tailwindcss/typography";
+
+@theme {
+  --color-background: #09090b;
+  --color-foreground: rgba(255, 255, 255, 0.92);
+  --color-surface-0: #09090b;
+  --color-surface-1: #18181b;
+  --color-surface-2: #27272a;
+  --color-surface-3: #3f3f46;
+}
+
+:root {
+  /* Typography scale */
+  --text-xs: 0.75rem;
+  --text-sm: 0.875rem;
+  --text-base: 1.0rem;
+  --text-lg: 1.125rem;
+  --text-xl: 1.375rem;
+
+  /* Semantic color tokens */
+  --priority-p0: #ef4444;
+  --priority-p1: #f97316;
+  --priority-p2: #6366f1;
+  --priority-p3: #52525b;
+
+  --status-todo: #52525b;
+  --status-inprogress: #3b82f6;
+  --status-awaiting: #eab308;
+  --status-resolved: #22c55e;
+  --status-closed: #27272a;
+
+  --surface-0: #09090b;
+  --surface-1: #18181b;
+  --surface-2: #27272a;
+  --surface-3: #3f3f46;
+
+  --text-primary: rgba(255,255,255,0.92);
+  --text-secondary: rgba(255,255,255,0.55);
+  --text-muted: rgba(255,255,255,0.28);
+}
+
+body {
+  background-color: var(--surface-0);
+  color: var(--text-primary);
+  font-family: var(--font-geist-sans);
+  min-height: 100vh;
+  font-size: var(--text-sm);
+}
+
+.glass-card {
+  background: var(--surface-1);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
+}
+
+h1 { font-size: var(--text-xl); font-weight: 800; }
+h2 { font-size: var(--text-lg); font-weight: 700; }
+h3 { font-size: var(--text-base); font-weight: 700; }
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: var(--surface-3);
+  border-radius: 10px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}

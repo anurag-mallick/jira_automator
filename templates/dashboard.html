@@ -1,0 +1,271 @@
+by |<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sprint Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { background-color: #f8f9fa; padding-top: 50px; }
+        .container { max-width: 1200px; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .btn-primary { background-color: #0052CC; border-color: #0052CC; }
+        .chart-container { position: relative; height: 300px; width: 100%; margin: auto; }
+        .sprint-header { border-bottom: 2px solid #0052CC; padding-bottom: 15px; margin-bottom: 25px; }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-light bg-light mb-4 shadow-sm" style="position: fixed; top: 0; width: 100%; z-index: 1000;">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="#">Jira Automator</a>
+            <div class="navbar-nav">
+                <a class="nav-link" href="/">Single Create</a>
+                <a class="nav-link" href="/bulk">Bulk Create</a>
+                <a class="nav-link active" href="/dashboard" style="font-weight: bold; color: #0052CC !important;">Sprint Dashboard</a>
+                <a class="nav-link" href="/config">Settings</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container" style="margin-top: 70px;">
+        <div id="activeSprintHeader" class="sprint-header" style="display:none;">
+            <h2 id="activeSprintName">Active Sprint</h2>
+            <p class="text-muted" id="activeSprintDates"></p>
+        </div>
+
+        <div class="row mb-4">
+            <div class="col-md-6">
+                <label for="sprintSelect" class="form-label">View Different Sprint</label>
+                <select class="form-select" id="sprintSelect">
+                    <option value="">Loading sprints...</option>
+                </select>
+            </div>
+            <div class="col-md-6 d-flex align-items-end">
+                <div id="sprintSummary" class="h5 mb-0" style="display:none;">
+                    Total Issues: <span id="totalIssues" class="badge bg-primary">0</span>
+                </div>
+            </div>
+        </div>
+
+        <div id="metricsContent" style="display:none;">
+            <div class="row mb-5">
+                <div class="col-md-6 text-center border-end">
+                    <h5>Status Distribution</h5>
+                    <div class="chart-container">
+                        <canvas id="statusChart"></canvas>
+                    </div>
+                </div>
+                <div class="col-md-6 text-center">
+                    <h5>Assignee Workload</h5>
+                    <div class="chart-container">
+                        <canvas id="assigneeChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h4>Sprint Issues</h4>
+                <input type="text" id="tableFilter" class="form-control w-25" placeholder="Filter issues...">
+            </div>
+            
+            <div class="table-responsive">
+                <table class="table table-hover" id="issuesTable">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Key</th>
+                            <th>Summary</th>
+                            <th>Type</th>
+                            <th>Priority</th>
+                            <th>Assignee</th>
+                            <th>Status</th>
+                            <th>Labels</th>
+                        </tr>
+                    </thead>
+                    <tbody id="issuesTableBody"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <div id="errorArea" class="alert alert-danger" style="display:none;"></div>
+    </div>
+
+    <script>
+        const BOARD_ID = "{{ board_id }}";
+        const BASE_URL = "{{ base_url }}";
+
+        const sprintSelect = document.getElementById('sprintSelect');
+        const metricsContent = document.getElementById('metricsContent');
+        const sprintSummary = document.getElementById('sprintSummary');
+        const totalIssuesSpan = document.getElementById('totalIssues');
+        const issuesTableBody = document.getElementById('issuesTableBody');
+        const errorArea = document.getElementById('errorArea');
+        const activeSprintHeader = document.getElementById('activeSprintHeader');
+        const activeSprintName = document.getElementById('activeSprintName');
+        const activeSprintDates = document.getElementById('activeSprintDates');
+        const tableFilter = document.getElementById('tableFilter');
+
+        let statusChart = null;
+        let assigneeChart = null;
+        let currentIssues = [];
+
+        async function init() {
+            await loadSprints();
+            if (BOARD_ID) {
+                await loadActiveSprint();
+            } else {
+                showError("Board ID not configured in Settings.");
+            }
+        }
+
+        async function loadSprints() {
+            try {
+                const response = await fetch('/api/sprints');
+                const result = await response.json();
+                if (result.success) {
+                    sprintSelect.innerHTML = '<option value="">-- Switch Sprint --</option>';
+                    result.sprints.forEach(s => {
+                        const option = document.createElement('option');
+                        option.value = s.id;
+                        option.text = s.name;
+                        sprintSelect.appendChild(option);
+                    });
+                }
+            } catch (e) { console.error('Failed to load sprints', e); }
+        }
+
+        async function loadActiveSprint() {
+            try {
+                const response = await fetch(`/api/active-sprint?board_id=${BOARD_ID}`);
+                const result = await response.json();
+                if (result.success && result.sprint) {
+                    const s = result.sprint;
+                    activeSprintHeader.style.display = 'block';
+                    activeSprintName.innerText = s.name;
+                    activeSprintDates.innerText = `${new Date(s.startDate).toLocaleDateString()} - ${new Date(s.endDate).toLocaleDateString()}`;
+                    loadSprintTickets(s.id);
+                } else {
+                    showError("No active sprint found for this board.");
+                }
+            } catch (e) { showError('Failed to load active sprint: ' + e.message); }
+        }
+
+        async function loadSprintTickets(sprintId) {
+            if (!sprintId) return;
+            metricsContent.style.display = 'none';
+            sprintSummary.style.display = 'none';
+            errorArea.style.display = 'none';
+
+            try {
+                const response = await fetch(`/api/sprint-tickets?sprint_id=${sprintId}`);
+                const result = await response.json();
+                if (result.success) {
+                    currentIssues = result.tickets;
+                    displayMetrics(result.tickets);
+                } else {
+                    showError(result.error);
+                }
+            } catch (e) { showError('Failed to load tickets: ' + e.message); }
+        }
+
+        function displayMetrics(tickets) {
+            metricsContent.style.display = 'block';
+            sprintSummary.style.display = 'block';
+            totalIssuesSpan.innerText = tickets.length;
+
+            renderTable(tickets);
+            renderCharts(tickets);
+        }
+
+        function renderTable(tickets) {
+            issuesTableBody.innerHTML = '';
+            tickets.forEach(i => {
+                const tr = document.createElement('tr');
+                const labelsHtml = i.labels.map(l => `<span class="badge bg-secondary me-1">${l}</span>`).join('');
+                tr.innerHTML = `
+                    <td><a href="${BASE_URL}/browse/${i.key}" target="_blank">${i.key}</a></td>
+                    <td>${i.summary}</td>
+                    <td><small>${i.issue_type}</small></td>
+                    <td><small>${i.priority}</small></td>
+                    <td>${i.assignee_name}</td>
+                    <td><span class="badge bg-info text-dark">${i.status}</span></td>
+                    <td>${labelsHtml}</td>
+                `;
+                issuesTableBody.appendChild(tr);
+            });
+        }
+
+        function renderCharts(tickets) {
+            const statusCounts = {};
+            const assigneeCounts = {};
+
+            tickets.forEach(t => {
+                statusCounts[t.status] = (statusCounts[t.status] || 0) + 1;
+                assigneeCounts[t.assignee_name] = (assigneeCounts[t.assignee_name] || 0) + 1;
+            });
+
+            // Status Chart
+            const ctxStatus = document.getElementById('statusChart').getContext('2d');
+            if (statusChart) statusChart.destroy();
+            statusChart = new Chart(ctxStatus, {
+                type: 'doughnut',
+                data: {
+                    labels: Object.keys(statusCounts),
+                    datasets: [{
+                        data: Object.values(statusCounts),
+                        backgroundColor: ['#0052CC', '#36B37E', '#FFAB00', '#FF5630', '#6554C0']
+                    }]
+                },
+                options: { responsive: true, maintainAspectRatio: false }
+            });
+
+            // Assignee Chart
+            const ctxAssignee = document.getElementById('assigneeChart').getContext('2d');
+            if (assigneeChart) assigneeChart.destroy();
+            assigneeChart = new Chart(ctxAssignee, {
+                type: 'bar',
+                data: {
+                    labels: Object.keys(assigneeCounts),
+                    datasets: [{
+                        label: 'Tickets',
+                        data: Object.values(assigneeCounts),
+                        backgroundColor: 'rgba(0, 82, 204, 0.7)'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } }
+                }
+            });
+        }
+
+        tableFilter.onkeyup = () => {
+            const val = tableFilter.value.toLowerCase();
+            const filtered = currentIssues.filter(i => 
+                i.key.toLowerCase().includes(val) || 
+                i.summary.toLowerCase().includes(val) || 
+                i.assignee_name.toLowerCase().includes(val) ||
+                i.status.toLowerCase().includes(val)
+            );
+            renderTable(filtered);
+        };
+
+        function showError(msg) {
+            errorArea.innerText = msg;
+            errorArea.style.display = 'block';
+        }
+
+        sprintSelect.onchange = (e) => {
+            if (e.target.value) {
+                const selectedText = e.target.options[e.target.selectedIndex].text;
+                activeSprintHeader.style.display = 'block';
+                activeSprintName.innerText = selectedText;
+                activeSprintDates.innerText = "";
+                loadSprintTickets(e.target.value);
+            }
+        };
+        
+        init();
+    </script>
+</body>
+</html>
